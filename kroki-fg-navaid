@@ -19,9 +19,12 @@ kroki-fg-navaid - navigation helper for FlightGear
 
 =head1 SYNOPSIS
 
-  kroki-fg-navaid [OPTIONS] -- LATITUDE,LONGITUDE
+  kroki-fg-navaid [OPTIONS] -- LOCATION
 
 =head2 LOCATION
+
+Location can be specified either as an I<IDENT> of an object (airport,
+VOR, fix, etc.) or as a pair I<LATITUDE,LONGITUDE>.
 
 I<LATITUDE> and I<LONGITUDE> of a location may be given in a number of
 formats, including
@@ -49,6 +52,17 @@ becomes B<N89,W084>.
 =head2 OPTIONS
 
 =over
+
+=item C<-m, --metric>
+
+By default distances and heights are given in nautical miles (B<nm>)
+and feet (B<'>).  C<--metric> enables the output in kilometers
+(B<km>) and meters (B<m>).
+
+=item C<-C, --navdata-cache=PATH>
+
+Optional path to I<navdata> cache file.  Default is most recent cache
+file in C<~/.fgfs/>.
 
 =item C<-W, --wmm=YEAR>
 
@@ -91,14 +105,104 @@ use Pod::Usage;
 my %option = (
     wmm => 2005,
 );
-if (! GetOptions(\%option, qw(wmm|W=i help|h))
-    || @ARGV != 1 || $ARGV[0] !~ /.,./) {
+if (! GetOptions(\%option, qw(metric|m navdata-cache|C=s wmm|W=i help|h))
+    || @ARGV != 1) {
     pod2usage(1);
 }
 if (exists $option{help}) {
     pod2usage(0);
     exit;
 }
+unless (exists $option{'navdata-cache'}) {
+    my $major = 0;
+    my $minor = 0;
+    foreach my $cache (<$ENV{HOME}/.fgfs/navdata_*_*.cache>) {
+        if ($cache =~ m|/navdata_(\d+)_(\d+)\.cache$|
+            && ($1 > $major || ($1 == $major && $2 > $minor))) {
+            $major = $1;
+            $minor = $2;
+            $option{"navdata-cache"} = $cache;
+        }
+    }
+}
+die "No navdata cache file found\n"
+    unless exists $option{'navdata-cache'} && -f $option{'navdata-cache'};
+
+
+sub NM { sub { ($option{metric} ? ($_[0] * 1.852, "km") : ($_[0], "nm")) } }
+sub M { sub { ($option{metric} ? ($_[0], "m") : ($_[0] / 0.3048, "'")) } }
+
+
+use DBI;
+
+my $dsn = "DBI:SQLite:dbname=$option{'navdata-cache'}";
+my $attrs = { ReadOnly => 1,
+              PrintError => 0,
+              RaiseError => 1 };
+my $dbh = DBI->connect($dsn, '', '', $attrs);
+
+my @id2type = qw(
+     none AIRPORT HELIPORT SEAPORT RUNWAY HELIPAD TAXIWAY PAVEMENT WAYPOINT
+     FIX NDB VOR ILS LOC GS OM MM IM DME TACAN MOBILE_TACAN OBSTACLE TOWER
+     FREQ_GROUND FREQ_TOWER FREQ_ATIS FREQ_AWOS FREQ_APP_DEP FREQ_ENROUTE
+     FREQ_CLEARANCE FREQ_UNICOM PARKING TAXI_NODE COUNTRY CITY TOWN VILLAGE
+);
+my %type2id = map { ($id2type[$_], $_) } (0..$#id2type);
+
+my @id2surface = (
+    "(none)", "asphalt", "concrete", "turf/grass", "dirt", "gravel", "asphalt",
+    "concrete", "turf/grass", "dirt", "asphalt", "concrete", "dry lakebed",
+    "water", "snow/ice", "(unknown)"
+);
+
+my %info = (
+    AIRPORT => \&airport_info,
+    HELIPORT => \&airport_info,
+    SEAPORT => \&airport_info,
+    WAYPOINT => \&fix_info,
+    FIX => \&fix_info,
+    NDB => \&nav_info,
+    VOR => \&nav_info,
+    ILS => \&nav_info,
+    LOC => \&nav_info,
+    DME => \&nav_info,
+    TACAN => \&nav_info,
+    MOBILE_TACAN => \&nav_info,
+);
+
+my $loc_info = $dbh->prepare(qq{
+    SELECT rowid, type, name, lon, lat, elev_m
+    FROM positioned
+    WHERE ident = ? AND type IN (@{[ join ",", @type2id{(keys %info)} ]})
+    ORDER BY type
+});
+
+my $airport_info = $dbh->prepare(qq{
+    SELECT p.rowid, p.type, p.ident, p.name,
+           r.length_ft AS length_m, r.width_m, r.surface, r.reciprocal, r.ils,
+           c.freq_khz, c.range_nm
+    FROM positioned p LEFT JOIN runway AS r ON p.rowid = r.rowid
+                      LEFT JOIN comm AS c ON p.rowid = c.rowid
+    WHERE p.airport = ? AND p.type IN (@{[
+        join ",", @type2id{qw(RUNWAY HELIPAD FREQ_GROUND FREQ_TOWER FREQ_ATIS
+                              FREQ_AWOS FREQ_APP_DEP FREQ_ENROUTE
+                              FREQ_CLEARANCE FREQ_UNICOM)}
+    ]})
+    ORDER BY p.type, p.ident, p.name
+});
+
+my $fix_info = $dbh->prepare(q{
+    SELECT DISTINCT a.ident, CASE ae.network WHEN 1 THEN "low" ELSE "high" END
+    FROM airway_edge AS ae JOIN airway AS a ON ae.airway = a.rowid
+    WHERE ae.a = ?
+    ORDER BY a.rowid, a.network
+});
+
+my $nav_info = $dbh->prepare(q{
+    SELECT freq, range_nm, multiuse, colocated
+    FROM navaid
+    WHERE rowid = ?
+});
 
 
 use Geo::Inverse;
@@ -107,6 +211,25 @@ my $igeo = Geo::Inverse->new();
 my $magdecl = MagneticDeclination->new($igeo->ellipsoid, $option{wmm});
 
 my ($location) = @ARGV;
+
+$loc_info->execute($location);
+my %colocated;
+while (my $loc = $loc_info->fetchrow_hashref) {
+    next if delete $colocated{$loc->{rowid}};
+
+    say "--";
+    my $typename = $id2type[$loc->{type}];
+    if ($typename ne 'TACAN' && $typename ne 'MOBILE_TACAN') {
+        my $md = $magdecl->compute($loc->{lat}, $loc->{lon});
+        say "Coordinates: ", coords2str($loc->{lat}, $loc->{lon});
+        say "Magnetic declination: ", magdecl2str($md);
+    }
+    say "Ident: $location";
+
+    my $info = $info{$typename};
+    $info->($loc, $typename, \%colocated) if $info;
+}
+
 
 use POSIX qw(fmod);
 
@@ -216,6 +339,123 @@ sub magdecl2str {
     my ($md) = @_;
 
     sprintf(q{%s%d°%02d' (%.2f)}, deg2dm('E', 'W', $md), $md)
+}
+
+
+sub dist2str {
+    my ($d, $units, $decimals) = @_;
+
+    my ($v, $u) = $units->($d);
+    my $scale = 10**($decimals//0);
+    $v = int($v * $scale) / $scale;
+    sprintf("%.*f%s", ${decimals}//0, $v, $u)
+}
+
+
+sub mhz2str {
+    my ($mhz) = @_;
+
+    my $s = sprintf("%.3f", $mhz);
+    $s =~ s/(?<!\.)0+$//;
+    $s . "mhz"
+}
+
+
+sub khz2str {
+    my ($khz) = @_;
+
+    $khz . "khz"
+}
+
+
+sub airport_info {
+    my ($loc, $typename) = @_;
+
+    say "Object: $loc->{name} ", lc $typename;
+    say "Elevation: ", dist2str($loc->{elev_m}, M);
+
+    my %reciprocal;
+    my %comm;
+    $airport_info->execute($loc->{rowid});
+    while (my $info = $airport_info->fetchrow_hashref) {
+        my $tn = $id2type[$info->{type}];
+        if ($tn eq 'RUNWAY') {
+            my $r = delete $reciprocal{$info->{rowid}};
+            if ($r) {
+                my $ils = "";
+                if ($r->{ils} && $info->{ils}) {
+                    $ils = ", ILS on both";
+                } elsif ($r->{ils}) {
+                    $ils = ", ILS on $r->{ident}";
+                } elsif ($info->{ils}) {
+                    $ils = ", ILS on $info->{ident}";
+                }
+                say "Runway $r->{ident}-$info->{ident}: ",
+                    dist2str($info->{length_m}, M),
+                    " x ", dist2str($info->{width_m}, M),
+                    ", $id2surface[$info->{surface}]", $ils;
+            } else {
+                $reciprocal{$info->{reciprocal}} = $info;
+            }
+        } elsif ($tn eq 'HELIPAD') {
+            say "Helipad $info->{ident}: ", dist2str($info->{length_m}, M),
+                " x ", dist2str($info->{width_m}, M),
+                ", $id2surface[$info->{surface}]";
+        } else {
+            push @{$comm{$info->{name}, $info->{range_nm}}}, $info->{freq_khz};
+        }
+    }
+    foreach my $c (sort keys %comm) {
+        my ($n, $r) = split "\034", $c, 2;
+        my $f = $comm{$c};
+        say "$n (", dist2str($r, NM), "): ",
+            join(", ", map { mhz2str($_ / 1000) } @$f);
+    }
+}
+
+
+sub fix_info {
+    my ($loc, $typename) = @_;
+
+    say "Object: ", lc $typename;
+    say "Elevation: ", dist2str($loc->{elev_m}, M) if $loc->{elev_m};
+    my $info = $dbh->selectall_arrayref($fix_info, undef, $loc->{rowid});
+    if (@$info) {
+        my %info;
+        foreach my $i (@$info) {
+            push @{$info{$i->[0]}}, $i->[1];
+        }
+        say "Airways: ",
+            join(", ", map { "$_ (" . join(", ", @{$info{$_}}) . ")" }
+                           sort keys %info);
+    }
+}
+
+
+sub nav_info {
+    my ($loc, $typename, $colocated) = @_;
+
+    say "Object: $loc->{name}";
+    say "Elevation: ", dist2str($loc->{elev_m}, M);
+
+    my $info = $dbh->selectrow_hashref($nav_info, undef, $loc->{rowid});
+    if ($typename eq 'VOR') {
+        say "Orientation: ", magdecl2str($info->{multiuse});
+    }
+    my $freq = \&mhz2str;
+    if ($typename eq 'NDB'
+        || ($typename eq 'DME' && $info->{freq} % 100 == 0)) {
+        $freq = \&khz2str;
+    }
+    say "Frequency: ", $freq->($info->{freq} / 100),
+        " (", dist2str($info->{range_nm}, NM), ")";
+    if ($info->{colocated}) {
+        my $ci = $dbh->selectrow_hashref($nav_info, undef, $info->{colocated});
+        if ($ci->{freq} == $info->{freq}
+            && $ci->{range_nm} == $info->{range_nm}) {
+            $colocated->{$info->{colocated}} = 1;
+        }
+    }
 }
 
 
