@@ -24,7 +24,8 @@ kroki-fg-navaid - navigation helper for FlightGear
 =head2 LOCATION
 
 Location can be specified either as an I<IDENT> of an object (airport,
-VOR, fix, etc.) or as a pair I<LATITUDE,LONGITUDE>.
+VOR, fix, etc.), runway as I<ARPT-RW> (like C<KSFO-28L>), or as a pair
+I<LATITUDE,LONGITUDE>.
 
 I<LATITUDE> and I<LONGITUDE> of a location may be given in a number of
 formats, including
@@ -204,6 +205,28 @@ my $nav_info = $dbh->prepare(q{
     WHERE rowid = ?
 });
 
+my $runway_info = $dbh->prepare(qq{
+    SELECT p.rowid, p.type, p.lon, p.lat, p.elev_m,
+           r.heading, r.length_ft AS length_m, r.width_m, r.surface
+    FROM positioned AS p INDEXED BY pos_apt_type  -- force the right index
+        JOIN runway AS r ON p.rowid = r.rowid
+    WHERE p.airport = ? AND p.type = $type2id{RUNWAY}
+        AND p.ident = ?
+});
+
+my $ils_info = $dbh->prepare(qq{
+    SELECT p.type, p.ident, p.name, p.lon, p.lat, p.elev_m,
+           n.freq, n.range_nm, n.multiuse,
+           d.multiuse AS dme_bias,
+           dp.lon As dme_lon, dp.lat AS dme_lat
+    FROM positioned AS p JOIN navaid AS n ON p.rowid = n.rowid
+        LEFT JOIN navaid AS d ON n.colocated = d.rowid AND n.freq = d.freq
+        LEFT JOIN positioned AS dp ON d.rowid = dp.rowid
+    WHERE p.airport = ? AND p.type IN (@{[
+        join ",", @type2id{qw(ILS LOC GS OM MM IM)}
+    ]}) AND n.runway = ?
+});
+
 
 use Geo::Inverse;
 
@@ -229,6 +252,10 @@ while (my $loc = $loc_info->fetchrow_hashref) {
     my $info = $info{$typename};
     $info->($loc, $typename, \%colocated) if $info;
 }
+
+
+my ($apt, $rwy) = split /-/, $location, 2;
+runway_info($apt, $rwy) if defined $apt and defined $rwy;
 
 
 use POSIX qw(fmod);
@@ -454,6 +481,139 @@ sub nav_info {
         if ($ci->{freq} == $info->{freq}
             && $ci->{range_nm} == $info->{range_nm}) {
             $colocated->{$info->{colocated}} = 1;
+        }
+    }
+}
+
+
+sub deg_round {
+    my ($deg) = @_;
+
+    $deg = sprintf("%.0f", $deg);
+    $deg += 360 while $deg < 0;
+    $deg -= 360 while $deg >= 360;
+
+    return $deg;
+}
+
+
+sub heading2str {
+    my ($heading, $md) = @_;
+
+    sprintf("%d°M (%d°T)", deg_round($heading - $md), deg_round($heading))
+}
+
+
+sub runway_info {
+    my ($apt, $rwy) = @_;
+
+    $loc_info->execute($apt);
+    while (my $loc = $loc_info->fetchrow_hashref) {
+        my $typename = $id2type[$loc->{type}];
+        next if $typename ne 'AIRPORT'
+            and $typename ne 'HELIPORT'
+            and $typename ne 'SEAPORT';
+
+        $runway_info->execute($loc->{rowid}, $rwy);
+        while (my $r = $runway_info->fetchrow_hashref) {
+            $r->{elev_m} ||= $loc->{elev_m};
+
+            say "--";
+            my $md = $magdecl->compute($r->{lat}, $r->{lon});
+            say "Coordinates: ", coords2str($r->{lat}, $r->{lon});
+            say "Magnetic declination: ", magdecl2str($md);
+            say "Ident: $apt $rwy";
+            say "Object: $loc->{name} ", lc $typename,
+                ", ", lc $id2type[$r->{type}], " $rwy";
+            say "Surface: $id2surface[$r->{surface}]";
+            say "Dimensions: ", dist2str($r->{length_m}, M),
+                " x ", dist2str($r->{width_m}, M);
+            say "Elevation: ", dist2str($r->{elev_m}, M);
+            say "Heading: ", heading2str($r->{heading}, $md);
+
+            my %ils;
+            $ils_info->execute($loc->{rowid}, $r->{rowid});
+            while (my $i = $ils_info->fetchrow_hashref) {
+                $ils{$id2type[$i->{type}]} = $i;
+            }
+
+            my $dme_bias;
+            my $dme_dist;
+            foreach my $n (qw(LOC ILS)) {
+                my $i = $ils{$n} or next;
+                $dme_bias = $i->{dme_bias};
+                if (defined $dme_bias) {
+                    my (undef, undef, $dist) =
+                        $igeo->inverse($i->{dme_lat}, $i->{dme_lon},
+                                       $r->{lat}, $r->{lon});
+                    $dme_dist = $dist / 1852 - $dme_bias;
+                }
+                my $name;
+                if ($n eq 'ILS') {
+                    $name = $i->{name};
+                    $name =~ s/.+ //;
+                } else {
+                    $name = "Localizer";
+                }
+
+                say "$name (", dist2str($i->{range_nm}, NM),
+                    "): $i->{ident} ", mhz2str($i->{freq} / 100),
+                    " ", heading2str($i->{multiuse}, $md);
+            }
+
+            my $gs = $ils{GS};
+            my $touchdown;
+            my $tan_slope;
+            if ($gs) {
+                $gs->{elev_m} = $r->{elev_m};
+                my (undef, $baz, $dist) =
+                    $igeo->inverse($gs->{lat}, $gs->{lon}, $r->{lat}, $r->{lon});
+                $touchdown =
+                    $dist * cos(Math::Trig::deg2rad($baz - $r->{heading}));
+                my $deg = $gs->{multiuse} / 100000;
+                $tan_slope = Math::Trig::tan(Math::Trig::deg2rad($deg));
+                my $slope = sprintf "%.1f", $deg;
+                $slope =~ s/\.?0+$//;
+
+                say "Glideslope: $slope°";
+            }
+
+            foreach my $n (["OM", "Outer"], ["MM", "Middle"], ["IM", "Inner"]) {
+                my $i = $ils{$n->[0]} or next;
+                $i->{elev_m} ||= $r->{elev_m};
+                my (undef, undef, $dist) =
+                    $igeo->inverse($i->{lat}, $i->{lon}, $r->{lat}, $r->{lon});
+
+                print "$n->[1] marker: ";
+                if (defined $dme_dist) {
+                    print "DME ", dist2str($dist / 1852 + $dme_dist, NM, 1),
+                          ", ";
+                }
+                if ($gs) {
+                    my $h = ($dist + $touchdown) * $tan_slope;
+                    $h -= $i->{elev_m} - $gs->{elev_m};
+                    print "RA ", dist2str($h, M), ", ";
+                }
+                print dist2str($dist / 1852, NM, 1), " to runway edge\n";
+            }
+
+            if (defined $dme_dist or $gs) {
+                print "Runway edge: ";
+                if (defined $dme_dist) {
+                    print "DME ", dist2str($dme_dist, NM, 1);
+                }
+                if ($gs) {
+                    my $h = $touchdown * $tan_slope;
+                    $h -= $r->{elev_m} - $gs->{elev_m};
+                    print ", " if defined $dme_dist;
+                    print "RA ", dist2str($h, M);
+                }
+                print "\n";
+            }
+            if ($gs) {
+                say "Touchdown: ", dist2str($touchdown / 1852, NM, 1),
+                    " past runway edge";
+            }
         }
     }
 }
