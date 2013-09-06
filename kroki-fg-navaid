@@ -500,7 +500,7 @@ sub deg_round {
 sub heading2str {
     my ($heading, $md) = @_;
 
-    sprintf("%d°M (%d°T)", deg_round($heading - $md), deg_round($heading))
+    sprintf("%03d°M (%03d°T)", deg_round($heading - $md), deg_round($heading))
 }
 
 
