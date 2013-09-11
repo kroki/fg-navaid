@@ -36,19 +36,19 @@ formats, including
 
   s28.567894
 
-  w46o36"
+  w46*36"
 
-  E 235 o 4.5678 '
+  E 235 * 4.5678 '
 
 I.e. northern hemisphere is specified by prefix B<N>, B<n>, B<+>, or
 no prefix; southern hemisphere is specified by prefix B<S>, B<s>, or
 B<->; eastern hemisphere by B<E>, B<e>, B<+> or no prefix; western
 hemisphere by B<W>, B<w>, or B<->.  Coordinates may be given either as
-a decimal degrees or as a triplet of degrees (denoted by B<°> or
-B<o>), minutes (denoted by B<'>), seconds (denoted by B<"> or B<''>).
-Each part is optional and the last one may be fractional.  Whitespaces
-are ignored.  Coordinates are normalized, for instance B<N91,E096>
-becomes B<N89,W084>.
+a decimal degrees or as a triplet of degrees (denoted by B<°> or B<*>
+or B<o>), minutes (denoted by B<'>), seconds (denoted by B<"> or
+B<''>).  Each part is optional and the last one may be fractional.
+Whitespaces are ignored.  Coordinates are normalized, for instance
+B<N91,E096> becomes B<N89,W084>.
 
 =head2 OPTIONS
 
@@ -299,8 +299,8 @@ sub str2deg {
         <rule: sign>     <pos> <MATCH=1> | <neg> <MATCH=-1>
         <rule: pos>      \+ | N | E
         <rule: neg>      \- | S | W
-        <rule: deg>      <MATCH=float> [°o]?
-                       | (?: <int> [°o] )? <min>
+        <rule: deg>      <MATCH=float> [°*o]?
+                       | (?: <int> [°*o] )? <min>
                          <MATCH=(?{ ($MATCH{int}//0) + ($MATCH{min}//0) / 60 })>
         <rule: min>      <MATCH=float> \'?
                        | (?: <int> \' )? <sec>
