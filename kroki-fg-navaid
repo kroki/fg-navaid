@@ -357,7 +357,7 @@ sub deg2dm {
 sub coords2str {
     my ($lat, $lon) = @_;
 
-    sprintf(q{%s%02d°%02d'%05.2f", %s%03d°%02d'%05.2f" (%.6f, %.6f)},
+    sprintf(q{%s%02d°%02d'%05.2f", %s%03d°%02d'%05.2f" (%.7f, %.7f)},
             deg2dms2f('N', 'S', $lat), deg2dms2f('E', 'W', $lon), $lat, $lon)
 }
 
