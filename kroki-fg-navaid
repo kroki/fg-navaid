@@ -711,10 +711,8 @@ sub nav_in_range {
             next if $geo[2] > $ni->{range_nm} * 1852;
             push @geo, $ni;
 
-            my $i;
-            for ($i = 0; $i < @nav; ++$i) {
-                last if $nav[$i][2] > $geo[2];
-            }
+            my $i = 0;
+            ++$i while $i < @nav and $nav[$i][2] <= $geo[2];
             splice @nav, $i, 0, \@geo;
             if (@nav > $count) {
                 pop @nav;
