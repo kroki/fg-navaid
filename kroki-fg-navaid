@@ -60,6 +60,19 @@ By default distances and heights are given in nautical miles (B<nm>)
 and feet (B<'>).  C<--metric> enables the output in kilometers
 (B<km>) and meters (B<m>).
 
+=item C<-b, --bearings[=NUM]>
+
+Report bearings to this many beacons (VORs or NDBs).  For VORs radial
+to the station is reported, for NDBs magnetic heading is reported.  In
+both cases true heading and the (ground) distance to the station are
+also reported.  When C<NUM> is not provided default is 2.
+
+=item C<-r, --range=NM|KM>
+
+Maximum range to look for nearest stations.  Specified in nautical
+miles or kilometers depending on the presence of C<--metric>.  Default
+is 100nm (185.2km).
+
 =item C<-C, --navdata-cache=PATH>
 
 Optional path to I<navdata> cache file.  Default is most recent cache
@@ -106,7 +119,8 @@ use Pod::Usage;
 my %option = (
     wmm => 2005,
 );
-if (! GetOptions(\%option, qw(metric|m navdata-cache|C=s wmm|W=i help|h))
+if (! GetOptions(\%option, qw(metric|m bearings|b:2 range|r=f
+                              navdata-cache|C=s wmm|W=i help|h))
     || @ARGV != 1) {
     pod2usage(1);
 }
@@ -114,6 +128,8 @@ if (exists $option{help}) {
     pod2usage(0);
     exit;
 }
+$option{range} //= ($option{metric} ? 185.2 : 100);
+
 unless (exists $option{'navdata-cache'}) {
     my $major = 0;
     my $minor = 0;
@@ -172,7 +188,7 @@ my %info = (
 );
 
 my $loc_info = $dbh->prepare(qq{
-    SELECT rowid, type, name, lon, lat, elev_m
+    SELECT rowid, type, name, lon, lat, elev_m, cart_x, cart_y, cart_z
     FROM positioned
     WHERE ident = ? AND type IN (@{[ join ",", @type2id{(keys %info)} ]})
     ORDER BY type
@@ -206,7 +222,7 @@ my $nav_info = $dbh->prepare(q{
 });
 
 my $runway_info = $dbh->prepare(qq{
-    SELECT p.rowid, p.type, p.lon, p.lat, p.elev_m,
+    SELECT p.rowid, p.type, p.lon, p.lat, p.elev_m, p.cart_x, p.cart_y, p.cart_z,
            r.heading, r.length_ft AS length_m, r.width_m, r.surface
     FROM positioned AS p INDEXED BY pos_apt_type  -- force the right index
         JOIN runway AS r ON p.rowid = r.rowid
@@ -227,6 +243,12 @@ my $ils_info = $dbh->prepare(qq{
     ]}) AND n.runway = ?
 });
 
+my $octree_children = $dbh->prepare(q{
+    SELECT children
+    FROM octree
+    WHERE rowid = ?
+});
+
 
 use Geo::Inverse;
 
@@ -242,8 +264,9 @@ while (my $loc = $loc_info->fetchrow_hashref) {
 
     say "--";
     my $typename = $id2type[$loc->{type}];
+    my $md;
     if ($typename ne 'TACAN' && $typename ne 'MOBILE_TACAN') {
-        my $md = $magdecl->compute($loc->{lat}, $loc->{lon});
+        $md = $magdecl->compute($loc->{lat}, $loc->{lon});
         say "Coordinates: ", coords2str($loc->{lat}, $loc->{lon});
         say "Magnetic declination: ", magdecl2str($md);
     }
@@ -251,6 +274,8 @@ while (my $loc = $loc_info->fetchrow_hashref) {
 
     my $info = $info{$typename};
     $info->($loc, $typename, \%colocated) if $info;
+
+    bearings($loc, $md) if defined $md;
 }
 
 
@@ -280,6 +305,13 @@ if (defined $lat and defined $lon) {
     my $md = $magdecl->compute($lat, $lon);
     say "Coordinates: ", coords2str($lat, $lon);
     say "Magnetic declination: ", magdecl2str($md);
+
+    my $loc = {
+        lat => $lat,
+        lon => $lon,
+    };
+    @$loc{qw(cart_x cart_y cart_z)} = geo2xyz($lat, $lon);
+    bearings($loc, $md);
 }
 
 
@@ -498,9 +530,10 @@ sub deg_round {
 
 
 sub heading2str {
-    my ($heading, $md) = @_;
+    my ($heading, $md, $sfx) = @_;
+    $sfx //= 'M';
 
-    sprintf("%03d°M (%03d°T)", deg_round($heading - $md), deg_round($heading))
+    sprintf("%03d°$sfx (%03d°T)", deg_round($heading - $md), deg_round($heading))
 }
 
 
@@ -614,8 +647,127 @@ sub runway_info {
                 say "Touchdown: ", dist2str($touchdown / 1852, NM, 1),
                     " past runway edge";
             }
+
+            bearings($r, $md);
         }
     }
+}
+
+
+sub octree_nodes {
+    my ($p, $r2, $id, $b, $e, $d2, $nodes) = @_;
+
+    $octree_children->execute($id);
+    my ($children) = $octree_children->fetchrow_array;
+    if ($children) {
+        for my $o (0..7) {
+            next unless $children & (1 << $o);
+
+            my @b = @$b;
+            for my $c (0..2) {
+                $b[$c] -= $e if $o & (1 << $c);
+            }
+
+            my $d2 = 0;
+            for my $c (0..2) {
+                my $d = $p->[$c] - $b[$c];
+                $d = -$d - $e if $d < 0;
+                $d2 += $d**2 if $d > 0;
+            }
+
+            if ($d2 <= $r2) {
+                octree_nodes($p, $r2, ($id << 3) | $o, \@b, $e / 2, $d2, $nodes);
+            }
+        }
+    } else {
+        push @$nodes, [$id, $d2];
+    }
+}
+
+
+sub nav_in_range {
+    my ($loc, $range, $count, @types) = @_;
+
+    octree_nodes([@$loc{qw(cart_x cart_y cart_z)}], $range**2, 1,
+                 [7000000, 7000000, 7000000], 7000000, 0, \my @nodes);
+
+    my $nav_in_node = $dbh->prepare_cached(qq{
+        SELECT p.type, p.ident, p.name, p.lon, p.lat, p.elev_m,
+               n.freq, n.range_nm, n.multiuse
+        FROM positioned AS p JOIN navaid AS n ON p.rowid = n.rowid
+        WHERE p.octree_node = ? AND p.type IN (@{[
+            join ",", @type2id{@types}
+        ]})
+    });
+
+    my @nav;
+    foreach my $n (sort { $a->[1] <=> $b->[1] } @nodes) {
+        last if $n->[1] > $range**2;
+        $nav_in_node->execute($n->[0]);
+        while (my $ni = $nav_in_node->fetchrow_hashref) {
+            my @geo =
+                $igeo->inverse($loc->{lat}, $loc->{lon}, $ni->{lat}, $ni->{lon});
+            next if $geo[2] > $range;
+            next if $geo[2] > $ni->{range_nm} * 1852;
+            push @geo, $ni;
+
+            my $i;
+            for ($i = 0; $i < @nav; ++$i) {
+                last if $nav[$i][2] > $geo[2];
+            }
+            splice @nav, $i, 0, \@geo;
+            if (@nav > $count) {
+                pop @nav;
+                $range = $nav[-1][2];
+            }
+        }
+    }
+
+    return @nav;
+}
+
+
+sub bearings {
+    my ($loc, $md) = @_;
+
+    return unless $option{bearings};
+
+    my $range = $option{range} * ($option{metric} ? 1000 : 1852);
+    my @nav = nav_in_range($loc, $range, $option{bearings}, 'VOR', 'NDB');
+    foreach my $n (@nav) {
+        my ($faz, $baz, $dist, $i) = @$n;
+        my $tn = $id2type[$i->{type}];
+        my ($freq, $bearing);
+        if ($tn eq 'VOR') {
+            $freq = mhz2str($i->{freq} / 100);
+            $bearing = heading2str($baz + 180, $i->{multiuse}, 'R');
+        } else {
+            $freq = khz2str($i->{freq} / 100);
+            $bearing = heading2str($faz, $md);
+        }
+        say "Bearing to: $i->{name} ($i->{ident}) $freq $bearing ",
+            dist2str($dist / 1852, NM, 1);
+    }
+}
+
+
+sub geo2xyz {
+    my ($lat, $lon) = @_;
+
+    $lat = Math::Trig::deg2rad($lat);
+    $lon = Math::Trig::deg2rad($lon);
+    my $cos_lat = cos($lat);
+    my $sin_lat = sin($lat);
+    my $cos_lon = cos($lon);
+    my $sin_lon = sin($lon);
+
+    my $e = $igeo->ellipsoid;
+    my $v = $e->a / sqrt(1 - $e->e2 * $sin_lat**2);
+    my $x = $v * $cos_lat * $cos_lon;
+    my $y = $v * $cos_lat * $sin_lon;
+    my $z = $v * (1 - $e->e2) * $sin_lat;
+
+    return ($x, $y, $z);
 }
 
 

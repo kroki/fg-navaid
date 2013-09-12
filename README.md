@@ -88,6 +88,20 @@ Output in metric system is enabled by `--metric` or `-m`:
     Touchdown: 0.3km past runway edge
 
 
+Bearings from the location to nearest beacons are reported with
+`--bearings` or `-b`, for instance:
+
+    $ kroki-fg-navaid --bearings=3 IBURI
+    --
+    Coordinates: N41°55'59.24", E141°28'10.71" (41.9331220, 141.4696410)
+    Magnetic declination: W8°37' (-8.62)
+    Ident: IBURI
+    Object: fix
+    Airways: V11 (low, high)
+    Bearing to: HAKODATE VOR-DME (HWE) 112.3mhz 260°R (251°T) 30.1nm
+    Bearing to: OMINATO NDB (OM) 353khz 208°M (200°T) 43.9nm
+    Bearing to: CHITOSE NDB (CH) 347khz 021°M (012°T) 45.1nm
+
 All distances and heights are rounded downwards.
 
 Note that the output is only as accurate and complete as the cache
