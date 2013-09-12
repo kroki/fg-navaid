@@ -71,7 +71,7 @@ also reported.  When C<NUM> is not provided default is 2.
 
 Maximum range to look for nearest stations.  Specified in nautical
 miles or kilometers depending on the presence of C<--metric>.  Default
-is 100nm (185.2km).
+is 200nm (370.4km).
 
 =item C<-C, --navdata-cache=PATH>
 
@@ -128,7 +128,7 @@ if (exists $option{help}) {
     pod2usage(0);
     exit;
 }
-$option{range} //= ($option{metric} ? 185.2 : 100);
+$option{range} //= ($option{metric} ? 370.4 : 200);
 
 unless (exists $option{'navdata-cache'}) {
     my $major = 0;
