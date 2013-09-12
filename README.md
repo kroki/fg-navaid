@@ -107,7 +107,7 @@ All distances and heights are rounded downwards.
 Note that the output is only as accurate and complete as the cache
 contents, which itself is derived from text navdata files that are
 known to be flawed in many locations.  Use your good judgment when
-relaying on the output.
+relying on the output.
 
 
 ## Required Perl modules
