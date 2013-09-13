@@ -73,6 +73,13 @@ Maximum range to look for nearest stations.  Specified in nautical
 miles or kilometers depending on the presence of C<--metric>.  Default
 is 200nm (370.4km).
 
+=item C<-R, --rsbns[=NUM]>
+
+Report Sm, Zm coordinates and UK of RSBN station for NVU correction
+(think of tu154b aircraft).  C<NUM> specifies the number of candidate
+stations to report and defaults to 1.  This option currently works
+only for runways.
+
 =item C<-C, --navdata-cache=PATH>
 
 Optional path to I<navdata> cache file.  Default is most recent cache
@@ -119,7 +126,7 @@ use Pod::Usage;
 my %option = (
     wmm => 2005,
 );
-if (! GetOptions(\%option, qw(metric|m bearings|b:2 range|r=f
+if (! GetOptions(\%option, qw(metric|m bearings|b:2 range|r=f rsbns|R:1
                               navdata-cache|C=s wmm|W=i help|h))
     || @ARGV != 1) {
     pod2usage(1);
@@ -649,6 +656,7 @@ sub runway_info {
             }
 
             bearings($r, $md);
+            rsbns($r, $r->{heading});
         }
     }
 }
@@ -767,6 +775,23 @@ sub geo2xyz {
     my $z = $v * (1 - $e->e2) * $sin_lat;
 
     return ($x, $y, $z);
+}
+
+
+sub rsbns {
+    my ($loc, $heading) = @_;
+
+    my $range = $option{range} * ($option{metric} ? 1000 : 1852);
+    my @vor = nav_in_range($loc, $range, $option{'rsbns'}, 'VOR');
+    foreach my $v (@vor) {
+        my ($faz, $baz, $dist, $i) = @$v;
+        my $Sm = $dist * cos(Math::Trig::deg2rad($faz - $heading)) / 1000;
+        my $Zm = $dist * sin(Math::Trig::deg2rad($faz - $heading)) / 1000;
+
+        printf("RSBN: %s (%s) %s Sm:%+.2fkm Zm:%+.2fkm UK:%3.2f°\n",
+               $i->{name}, $i->{ident}, mhz2str($i->{freq} / 100),
+               $Sm, $Zm, $heading);
+    }
 }
 
 

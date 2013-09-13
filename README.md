@@ -102,6 +102,24 @@ Bearings from the location to nearest beacons are reported with
     Bearing to: OMINATO NDB (OM) 353khz 208°M (200°T) 43.9nm
     Bearing to: CHITOSE NDB (CH) 347khz 021°M (012°T) 45.1nm
 
+
+For aircrafts having NVU (think of [tu154b]
+(https://github.com/yuriknsk/tu154b)) there's an option `--rsbns` (or
+`-R`):
+
+    $ kroki-fg-navaid -m -R UHBB-18
+    --
+    Coordinates: N50°26'16.12", E127°24'30.43" (50.4378109, 127.4084520)
+    Magnetic declination: W12°07' (-12.11)
+    Ident: UHBB 18
+    Object: IGNATYEVO airport, runway 18
+    Surface: asphalt
+    Dimensions: 2817m x 45m
+    Elevation: 194m
+    Heading: 180°M (168°T)
+    RSBN: BLAGOVESCHENSK VOR-DME (BLG) 113.6mhz Sm:+5.11km Zm:-0.27km UK:168.30°
+
+
 All distances and heights are rounded downwards.
 
 Note that the output is only as accurate and complete as the cache
