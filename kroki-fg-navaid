@@ -694,8 +694,11 @@ sub octree_nodes {
 
 
 sub nav_in_range {
-    my ($loc, $range, $count, @types) = @_;
+    my ($loc, $count, @types) = @_;
 
+    return unless $count;
+
+    my $range = $option{range} * ($option{metric} ? 1000 : 1852);
     octree_nodes([@$loc{qw(cart_x cart_y cart_z)}], $range**2, 1,
                  [7000000, 7000000, 7000000], 7000000, 0, \my @nodes);
 
@@ -737,10 +740,7 @@ sub nav_in_range {
 sub bearings {
     my ($loc, $md) = @_;
 
-    return unless $option{bearings};
-
-    my $range = $option{range} * ($option{metric} ? 1000 : 1852);
-    my @nav = nav_in_range($loc, $range, $option{bearings}, 'VOR', 'NDB');
+    my @nav = nav_in_range($loc, $option{bearings}, 'VOR', 'NDB');
     foreach my $n (@nav) {
         my ($faz, $baz, $dist, $i) = @$n;
         my $tn = $id2type[$i->{type}];
@@ -781,8 +781,7 @@ sub geo2xyz {
 sub rsbns {
     my ($loc, $heading) = @_;
 
-    my $range = $option{range} * ($option{metric} ? 1000 : 1852);
-    my @vor = nav_in_range($loc, $range, $option{'rsbns'}, 'VOR');
+    my @vor = nav_in_range($loc, $option{rsbns}, 'VOR');
     foreach my $v (@vor) {
         my ($faz, $baz, $dist, $i) = @$v;
         my $Sm = $dist * cos(Math::Trig::deg2rad($faz - $heading)) / 1000;
