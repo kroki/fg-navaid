@@ -692,7 +692,7 @@ sub nav_in_range {
                  [7000000, 7000000, 7000000], 7000000, 0, \my @nodes);
 
     my $nav_in_node = $dbh->prepare_cached(qq{
-        SELECT p.type, p.ident, p.name, p.lon, p.lat, p.elev_m,
+        SELECT p.rowid, p.type, p.ident, p.name, p.lon, p.lat, p.elev_m,
                n.freq, n.range_nm, n.multiuse
         FROM positioned AS p JOIN navaid AS n ON p.rowid = n.rowid
         WHERE p.octree_node = ? AND p.type IN (@{[
@@ -705,6 +705,7 @@ sub nav_in_range {
         last if $n->[1] > $range**2;
         $nav_in_node->execute($n->[0]);
         while (my $ni = $nav_in_node->fetchrow_hashref) {
+            next if $ni->{rowid} == $loc->{rowid};
             my @geo =
                 $igeo->inverse($loc->{lat}, $loc->{lon}, $ni->{lat}, $ni->{lon});
             next if $geo[2] > $range;
