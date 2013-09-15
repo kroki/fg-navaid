@@ -694,7 +694,7 @@ sub octree_nodes {
 
 
 sub nav_in_range {
-    my ($loc, $count, @types) = @_;
+    my ($loc, $count, $types, $has_colocated) = @_;
 
     return unless $count;
 
@@ -704,10 +704,10 @@ sub nav_in_range {
 
     my $nav_in_node = $dbh->prepare_cached(qq{
         SELECT p.rowid, p.type, p.ident, p.name, p.lon, p.lat, p.elev_m,
-               n.freq, n.range_nm, n.multiuse
+               n.freq, n.range_nm, n.multiuse, n.colocated
         FROM positioned AS p JOIN navaid AS n ON p.rowid = n.rowid
         WHERE p.octree_node = ? AND p.type IN (@{[
-            join ",", @type2id{@types}
+            join ",", @type2id{@$types}
         ]})
     });
 
@@ -717,6 +717,7 @@ sub nav_in_range {
         $nav_in_node->execute($n->[0]);
         while (my $ni = $nav_in_node->fetchrow_hashref) {
             next if $ni->{rowid} == $loc->{rowid};
+            next if $has_colocated and not $ni->{colocated};
             my @geo =
                 $igeo->inverse($loc->{lat}, $loc->{lon}, $ni->{lat}, $ni->{lon});
             next if $geo[2] > $range;
@@ -740,7 +741,7 @@ sub nav_in_range {
 sub bearings {
     my ($loc, $md) = @_;
 
-    my @nav = nav_in_range($loc, $option{bearings}, 'VOR', 'NDB');
+    my @nav = nav_in_range($loc, $option{bearings}, ['VOR', 'NDB']);
     foreach my $n (@nav) {
         my ($faz, $baz, $dist, $i) = @$n;
         my $tn = $id2type[$i->{type}];
@@ -781,7 +782,7 @@ sub geo2xyz {
 sub rsbns {
     my ($loc, $heading) = @_;
 
-    my @vor = nav_in_range($loc, $option{rsbns}, 'VOR');
+    my @vor = nav_in_range($loc, $option{rsbns}, ['VOR'], 1);
     foreach my $v (@vor) {
         my ($faz, $baz, $dist, $i) = @$v;
         my $Sm = $dist * cos(Math::Trig::deg2rad($faz - $heading)) / 1000;
