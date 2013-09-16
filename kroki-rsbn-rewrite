@@ -1,0 +1,174 @@
+#! /usr/bin/env perl
+#
+use v5.12;
+use strict;
+use warnings qw(FATAL);
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+kroki-rsbn-rewrite - rewrite RSBN navdata file
+
+=head1 SYNOPSIS
+
+  kroki-rsbn-rewrite [OPTIONS] < rsbn.dat > rsbn.dat-new
+
+=head2 OPTIONS
+
+=over
+
+=item C<-h, --elevation[=FEET]>
+
+Update station elevation.  When C<FEET> is omitted the script will use
+C<fgelev> utility, so it may be necessary to provide C<PATH>,
+C<FG_ROOT> and C<FG_SCENERY> environment variables.
+
+=item C<-f, --freq-from=OLD-BASE-MHz>
+=item C<-t, --freq-to=NEW-BASE-MHz>
+
+Shift frequencies from I<OLD-BASE-MHz> to I<NEW-BASE-MHz>.  For instance
+
+  --freq-from=116 --freq-to=960
+
+When C<--freq-to> is given C<--freq-from> must also be given.
+
+=item C<-m, --mag-decl[=DEG]>
+
+Update station magnetic declination.  When C<DEG> is omitted current
+value will be obtained with the C<kroki-fg-navaid> script (setting
+C<PATH> environment variable may be required).  Otherwise it probably
+makes sence to specify only zero for <DEG>.
+
+=item C<-n, --name-rewrite=/REGEXP/FORMAT/>
+
+Rewrite station name.  C<REGEXP> is a Perl regular expression,
+captures are allowed.  C<FORMAT> is a replacement string with the
+additional substitution of RSBN channel number for C<%c> (and percent
+sign for C<%%> just in case).  For isntance:
+
+  --name-rewrite='/(\S+)/$1 RSBN Ch%c VORTAC/'
+
+For C<%c> to work C<--freq-from> must be given;
+
+=item C<-h, --help>
+
+Print this message and exit.
+
+=back
+
+=cut
+
+use Getopt::Long qw(:config gnu_getopt);
+use Pod::Usage;
+
+my %option;
+if (! GetOptions(\%option, qw(elevation|h:s freq-from|f=f freq-to|t=f
+                              mag-decl|m:s name-rewrite|n=s help|h))
+    || (exists $option{'freq-to'} && !exists $option{'freq-from'})
+    || @ARGV) {
+    pod2usage(1);
+}
+if (exists $option{help}) {
+    pod2usage(0);
+    exit;
+}
+
+my $get_name;
+if (exists $option{'name-rewrite'}) {
+    my ($pat, $sub);
+    eval {
+        ($pat, $sub) = ($option{'name-rewrite'} =~ m|^/(.*)/(.*)/$|) or die;
+        $pat = qr/$pat/;
+        die if $sub =~ /(?:%%)*%(?:$|[^c])/;
+        $sub =~ s/(%%)*%c/$1%10\$02d/g;
+        $sub =~ s/\$([1-9])/%$1\$s/g;
+    };
+    if ($@) {
+        warn "--name-rewrite='$option{'name-rewrite'}' is invalid\n";
+        pod2usage(1);
+    }
+
+    $get_name = sub {
+        my ($name, $freq) = @_;
+
+        my $ch = ($freq - $option{'freq-from'} * 100) / 5 + 1
+            if exists $option{'freq-from'};
+
+        $name =~ /$pat/;
+        return sprintf($sub, $1, $2, $3, $4, $5, $6, $7, $8, $9, $ch);
+    };
+}
+
+my $get_elevation;
+if (exists $option{elevation}) {
+    if (length($option{elevation})) {
+        my $h = int($option{elevation});
+        $get_elevation = sub {
+            return $h;
+        }
+    } else {
+        eval {
+            use IPC::Open2;
+
+            $SIG{PIPE} = sub { die };
+
+            open2(\*FGELEV_OUT, \*FGELEV_IN, "fgelev")
+                or die "$!\n";
+
+            print FGELEV_IN "0 0 0";
+        };
+        die "can't run fgelev: $@" if $@;
+
+        $get_elevation = sub {
+            my ($lat, $lon) = @_;
+            print FGELEV_IN "0 $lon $lat\n";
+            my $line = <FGELEV_OUT>;
+            my (undef, $elev) = split /\s+/, $line, 2;
+            return int($elev / 0.3048 + 0.5);
+        };
+    }
+}
+
+my $get_magdecl;
+if (exists $option{'mag-decl'}) {
+    if (length($option{'mag-decl'})) {
+        my $md = $option{'mag-decl'} + 0.0;
+        $get_magdecl = sub {
+            return $md;
+        };
+    } else {
+        $get_magdecl = sub {
+            my ($lat, $lon) = @_;
+            open(\*NAVAID_OUT, '-|', "kroki-fg-navaid", "$lat,$lon")
+                or die "can't run kroki-fg-navaid: $!";
+            <NAVAID_OUT>;
+            my $line = <NAVAID_OUT>;
+            $line =~ /\((.+)\)/;
+            my $decl = $1;
+            close(NAVAID_OUT);
+            return $decl;
+        };
+    }
+}
+
+
+my @rec = grep { /^\s*3\s/ } <STDIN>;
+foreach (@rec) {
+    chomp;
+    my @r = split /\s+/, $_, 9;
+    $r[3] = $get_elevation->($r[1], $r[2]) if $get_elevation;
+    $r[6] = $get_magdecl->($r[1], $r[2]) if $get_magdecl;
+    $r[8] = $get_name->($r[8], $r[4]) if $get_name;
+    $r[4] += ($option{'freq-to'} - $option{'freq-from'}) * 100
+        if exists $option{'freq-to'};
+    printf("%-2d % 12.8f % 13.8f % 5d % 5u % 3u % 6.2f %-4s %s\n", @r);
+
+    $r[0] = 12;
+    $r[6] = 0;
+    $r[8] .= " DME";
+    printf("%-2d % 12.8f % 13.8f % 5d % 5u % 3u % 6.2f %-4s %s\n", @r);
+}
+say "99";
