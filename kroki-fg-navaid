@@ -314,6 +314,7 @@ if (defined $lat and defined $lon) {
     say "Magnetic declination: ", magdecl2str($md);
 
     my $loc = {
+        rowid => 0,
         lat => $lat,
         lon => $lon,
     };
