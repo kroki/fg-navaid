@@ -83,6 +83,10 @@ if (exists $option{'name-rewrite'}) {
         ($pat, $sub) = ($option{'name-rewrite'} =~ m|^/(.*)/(.*)/$|) or die;
         $pat = qr/$pat/;
         die if $sub =~ /(?:%%)*%(?:$|[^c])/;
+        if ($sub =~ /(?:%%)*%c/ && !exists $option{'freq-from'}) {
+            warn "\%c in --name-rewrite requires --freq-from\n";
+            die;
+        }
         $sub =~ s/(%%)*%c/$1%10\$02d/g;
         $sub =~ s/\$([1-9])/%$1\$s/g;
     };
