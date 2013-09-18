@@ -98,9 +98,9 @@ Bearings from the location to nearest beacons are reported with
     Ident: IBURI
     Object: fix
     Airways: V11 (low, high)
-    Bearing to: HAKODATE VOR-DME (HWE) 112.3mhz 260°R (251°T) 30.1nm
-    Bearing to: OMINATO NDB (OM) 353khz 208°M (200°T) 43.9nm
-    Bearing to: CHITOSE NDB (CH) 347khz 021°M (012°T) 45.1nm
+    Bearing to HAKODATE VOR-DME (100nm): HWE 112.3mhz 260°R (251°T) 30.1nm
+    Bearing to HAKODATE NDB (25nm): HW 388khz 261°M (252°T) 30.6nm
+    Bearing to MUKAWA VOR-DME (25nm): MKE 116.4mhz 039°R (030°T) 43.1nm
 
 
 For aircrafts having NVU (think of [tu154b]
@@ -117,7 +117,7 @@ For aircrafts having NVU (think of [tu154b]
     Dimensions: 2817m x 45m
     Elevation: 194m
     Heading: 180°M (168°T)
-    RSBN: BLAGOVESCHENSK VOR-DME (BLG) 113.6mhz Sm:+5.11km Zm:-0.27km UK:168.30° ZPU:180°25'M
+    BLAGOVESCHENSK VOR-DME (240km): BLG 113.6mhz Sm:+5.11km Zm:-0.26km UK:168.30° ZPU:180°25'M (5.1km)
 
 
 All distances and heights are rounded downwards.

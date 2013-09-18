@@ -722,7 +722,7 @@ sub nav_in_range {
             my @geo =
                 $igeo->inverse($loc->{lat}, $loc->{lon}, $ni->{lat}, $ni->{lon});
             next if $geo[2] > $range;
-            next if $geo[2] > $ni->{range_nm} * 1852;
+            next if 1 / ($geo[2]/1852 / $ni->{range_nm})**2 <= 0.2;
             push @geo, $ni;
 
             my $i = 0;
@@ -754,8 +754,8 @@ sub bearings {
             $freq = khz2str($i->{freq} / 100);
             $bearing = heading2str($faz, $md);
         }
-        say "Bearing to: $i->{name} ($i->{ident}) $freq $bearing ",
-            dist2str($dist / 1852, NM, 1);
+        printf("Bearing to $i->{name} (%s): $i->{ident} $freq $bearing %s\n",
+               dist2str($i->{range_nm}, NM), dist2str($dist / 1852, NM, 1));
     }
 }
 
@@ -792,10 +792,11 @@ sub rsbns {
         my $zpu = $heading - $md;
         $zpu += 360 while $zpu < 0;
         $zpu -= 360 while $zpu >= 360;
-        printf("RSBN: %s (%s) %s Sm:%+.2fkm Zm:%+.2fkm UK:%06.2f°"
-               . " ZPU:%03d°%02d'M\n",
-               $i->{name}, $i->{ident}, mhz2str($i->{freq} / 100),
-               $Sm, $Zm, $heading, (deg2dm(undef, undef, $zpu))[1, 2]);
+        printf("$i->{name} (%s): $i->{ident} %s Sm:%+.2fkm Zm:%+.2fkm"
+               . " UK:%06.2f° ZPU:%03d°%02d'M (%s)\n",
+               dist2str($i->{range_nm}, NM), mhz2str($i->{freq} / 100),
+               $Sm, $Zm, $heading, (deg2dm(undef, undef, $zpu))[1, 2],
+               dist2str($dist / 1852, NM, 1));
     }
 }
 
