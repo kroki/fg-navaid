@@ -98,9 +98,9 @@ Bearings from the location to nearest beacons are reported with
     Ident: IBURI
     Object: fix
     Airways: V11 (low, high)
-    Bearing to HAKODATE VOR-DME (HWE 112.3mhz 100nm): 260°R (251°T) 30.1nm
+    Bearing from HAKODATE VOR-DME (HWE 112.3mhz 100nm): 080°R (071°T) 30.1nm
     Bearing to HAKODATE NDB (HW 388khz 25nm): 261°M (252°T) 30.6nm
-    Bearing to MUKAWA VOR-DME (MKE 116.4mhz 25nm): 039°R (030°T) 43.1nm
+    Bearing from MUKAWA VOR-DME (MKE 116.4mhz 25nm): 219°R (210°T) 43.1nm
 
 
 For aircrafts having NVU (think of [tu154b]

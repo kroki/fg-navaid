@@ -62,10 +62,11 @@ and feet (B<'>).  C<--metric> enables the output in kilometers
 
 =item C<-b, --bearings[=NUM]>
 
-Report bearings to this many beacons (VORs or NDBs).  For VORs radial
-to the station is reported, for NDBs magnetic heading is reported.  In
-both cases true heading and the (ground) distance to the station are
-also reported.  When C<NUM> is not provided default is 2.
+Report bearings from/to this many beacons (from VORs or to NDBs).  For
+VORs bearing I<from> the station (i.e. current radial) is reported, for
+NDBs magnetic heading I<to> the beacon is reported.  In both cases
+true heading and the (ground) distance to the station are also
+reported.  When C<NUM> is not provided default is 2.
 
 =item C<-r, --range=NM|KM>
 
@@ -747,14 +748,17 @@ sub bearings {
         my ($faz, $baz, $dist, $i) = @$n;
         my $tn = $id2type[$i->{type}];
         my ($freq, $bearing);
+        my $dir;
         if ($tn eq 'VOR') {
+            $dir = "from";
             $freq = mhz2str($i->{freq} / 100);
-            $bearing = heading2str($baz + 180, $i->{multiuse}, 'R');
+            $bearing = heading2str($baz, $i->{multiuse}, 'R');
         } else {
+            $dir = "to";
             $freq = khz2str($i->{freq} / 100);
             $bearing = heading2str($faz, $md);
         }
-        printf("Bearing to $i->{name} ($i->{ident} $freq %s): $bearing %s\n",
+        printf("Bearing $dir $i->{name} ($i->{ident} $freq %s): $bearing %s\n",
                dist2str($i->{range_nm}, NM), dist2str($dist / 1852, NM, 1));
     }
 }
