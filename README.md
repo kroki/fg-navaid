@@ -107,17 +107,17 @@ For aircrafts having NVU (think of [tu154b]
 (https://github.com/yuriknsk/tu154b)) there's an option `--rsbns` (or
 `-R`):
 
-    $ kroki-fg-navaid -m -R UHBB-18
+    $ kroki-fg-navaid -m -R UIIB-15
     --
-    Coordinates: N50°26'16.12", E127°24'30.43" (50.4378109, 127.4084520)
-    Magnetic declination: W12°07' (-12.11)
-    Ident: UHBB 18
-    Object: IGNATYEVO airport, runway 18
-    Surface: asphalt
-    Dimensions: 2817m x 45m
-    Elevation: 194m
-    Heading: 180°M (168°T)
-    BLAGOVESCHENSK VOR-DME (240km): BLG 113.6mhz Sm:+5.11km Zm:-0.26km UK:168.30° ZPU:180°25'M (5.1km)
+    Coordinates: N52°55'47.34", E103°33'28.95" (52.9298168, 103.5580417)
+    Magnetic declination: W3°57' (-3.95)
+    Ident: UIIB 15
+    Object: Belaya airport, runway 15
+    Surface: concrete
+    Dimensions: 3999m x 79m
+    Elevation: 456m
+    Heading: 148°M (144°T)
+    BELAYA RSBN Ch06 VORTAC (240km): GW 960.25mhz Sm:+1.98km Zm:-0.25km UK:144.30° ZPU:148°15'M (2.0km)
 
 
 All distances and heights are rounded downwards.
