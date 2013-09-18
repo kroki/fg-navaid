@@ -98,9 +98,9 @@ Bearings from the location to nearest beacons are reported with
     Ident: IBURI
     Object: fix
     Airways: V11 (low, high)
-    Bearing to HAKODATE VOR-DME (100nm): HWE 112.3mhz 260°R (251°T) 30.1nm
-    Bearing to HAKODATE NDB (25nm): HW 388khz 261°M (252°T) 30.6nm
-    Bearing to MUKAWA VOR-DME (25nm): MKE 116.4mhz 039°R (030°T) 43.1nm
+    Bearing to HAKODATE VOR-DME (HWE 112.3mhz 100nm): 260°R (251°T) 30.1nm
+    Bearing to HAKODATE NDB (HW 388khz 25nm): 261°M (252°T) 30.6nm
+    Bearing to MUKAWA VOR-DME (MKE 116.4mhz 25nm): 039°R (030°T) 43.1nm
 
 
 For aircrafts having NVU (think of [tu154b]
@@ -117,7 +117,7 @@ For aircrafts having NVU (think of [tu154b]
     Dimensions: 3999m x 79m
     Elevation: 456m
     Heading: 148°M (144°T)
-    BELAYA RSBN Ch06 VORTAC (240km): GW 960.25mhz Sm:+1.98km Zm:-0.25km UK:144.30° ZPU:148°15'M (2.0km)
+    BELAYA RSBN Ch06 VORTAC (GW 960.25mhz 240km): Sm:+1.98km Zm:-0.25km UK:144.30° (ZPU:148°15'M) 2.0km
 
 
 All distances and heights are rounded downwards.

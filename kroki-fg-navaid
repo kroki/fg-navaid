@@ -754,7 +754,7 @@ sub bearings {
             $freq = khz2str($i->{freq} / 100);
             $bearing = heading2str($faz, $md);
         }
-        printf("Bearing to $i->{name} (%s): $i->{ident} $freq $bearing %s\n",
+        printf("Bearing to $i->{name} ($i->{ident} $freq %s): $bearing %s\n",
                dist2str($i->{range_nm}, NM), dist2str($dist / 1852, NM, 1));
     }
 }
@@ -792,9 +792,9 @@ sub rsbns {
         my $zpu = $heading - $md;
         $zpu += 360 while $zpu < 0;
         $zpu -= 360 while $zpu >= 360;
-        printf("$i->{name} (%s): $i->{ident} %s Sm:%+.2fkm Zm:%+.2fkm"
-               . " UK:%06.2f° ZPU:%03d°%02d'M (%s)\n",
-               dist2str($i->{range_nm}, NM), mhz2str($i->{freq} / 100),
+        printf("$i->{name} ($i->{ident} %s %s): Sm:%+.2fkm Zm:%+.2fkm"
+               . " UK:%06.2f° (ZPU:%03d°%02d'M) %s\n",
+               mhz2str($i->{freq} / 100), dist2str($i->{range_nm}, NM),
                $Sm, $Zm, $heading, (deg2dm(undef, undef, $zpu))[1, 2],
                dist2str($dist / 1852, NM, 1));
     }
