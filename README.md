@@ -117,7 +117,7 @@ For aircrafts having NVU (think of [tu154b]
     Dimensions: 2817m x 45m
     Elevation: 194m
     Heading: 180°M (168°T)
-    RSBN: BLAGOVESCHENSK VOR-DME (BLG) 113.6mhz Sm:+5.11km Zm:-0.27km UK:168.30°
+    RSBN: BLAGOVESCHENSK VOR-DME (BLG) 113.6mhz Sm:+5.11km Zm:-0.27km UK:168.30° ZPU:180°25'M
 
 
 All distances and heights are rounded downwards.

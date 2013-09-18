@@ -657,7 +657,7 @@ sub runway_info {
             }
 
             bearings($r, $md);
-            rsbns($r, $r->{heading});
+            rsbns($r, $md, $r->{heading});
         }
     }
 }
@@ -781,7 +781,7 @@ sub geo2xyz {
 
 
 sub rsbns {
-    my ($loc, $heading) = @_;
+    my ($loc, $md, $heading) = @_;
 
     my @vor = nav_in_range($loc, $option{rsbns}, ['VOR'], 1);
     foreach my $v (@vor) {
@@ -789,9 +789,13 @@ sub rsbns {
         my $Sm = $dist * cos(Math::Trig::deg2rad($faz - $heading)) / 1000;
         my $Zm = $dist * sin(Math::Trig::deg2rad($faz - $heading)) / 1000;
 
-        printf("RSBN: %s (%s) %s Sm:%+.2fkm Zm:%+.2fkm UK:%3.2f°\n",
+        my $zpu = $heading - $md;
+        $zpu += 360 while $zpu < 0;
+        $zpu -= 360 while $zpu >= 360;
+        printf("RSBN: %s (%s) %s Sm:%+.2fkm Zm:%+.2fkm UK:%06.2f°"
+               . " ZPU:%03d°%02d'M\n",
                $i->{name}, $i->{ident}, mhz2str($i->{freq} / 100),
-               $Sm, $Zm, $heading);
+               $Sm, $Zm, $heading, (deg2dm(undef, undef, $zpu))[1, 2]);
     }
 }
 
