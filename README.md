@@ -117,7 +117,8 @@ For aircrafts having NVU (think of [tu154b]
     Dimensions: 3999m x 79m
     Elevation: 456m
     Heading: 148°M (144°T)
-    BELAYA RSBN Ch06 VORTAC (GW 960.25mhz 240km): Sm:+1.98km Zm:-0.25km UK:144.30° (ZPU:148°15'M) 2.0km
+    NVU heading: ZPU:148°15'M UK:144°18'T
+    BELAYA RSBN Ch06 VORTAC (GW 960.25mhz 240km): Sm:+1.98km Zm:-0.25km (2.0km)
 
 
 All distances and heights are rounded downwards.
